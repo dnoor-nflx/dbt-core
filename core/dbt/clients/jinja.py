@@ -76,10 +76,19 @@ class MacroGenerator(CallableMacroGenerator):
             finally:
                 self.stack.pop(unique_id)
 
+    def call_as_python(self):
+        globals = {}
+        exec(self.macro.macro_sql, globals)
+        result = eval(self.macro.name + "()", globals)
+        return result
+
     # this makes MacroGenerator objects callable like functions
     def __call__(self, *args, **kwargs):
         with self.track_call():
-            return self.call_macro(*args, **kwargs)
+            if self.macro.is_python:
+                return self.call_as_python(*args, **kwargs)
+            else:
+                return self.call_macro(*args, **kwargs)
 
 
 class UnitTestMacroGenerator(MacroGenerator):

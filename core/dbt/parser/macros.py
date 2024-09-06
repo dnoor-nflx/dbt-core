@@ -13,6 +13,7 @@ from dbt.parser.search import FileBlock, filesystem_search
 from dbt_common.clients import jinja
 from dbt_common.utils import MACRO_PREFIX
 
+import ast
 
 class MacroParser(BaseParser[Macro]):
     # This is only used when creating a MacroManifest separate
@@ -20,6 +21,8 @@ class MacroParser(BaseParser[Macro]):
     def get_paths(self) -> List[FilePath]:
         return filesystem_search(
             project=self.project, relative_dirs=self.project.macro_paths, extension=".sql"
+        ) + filesystem_search(
+            project=self.project, relative_dirs=self.project.macro_paths, extension=".py"
         )
 
     @property
@@ -42,8 +45,25 @@ class MacroParser(BaseParser[Macro]):
             resource_type=base_node.resource_type,
             name=name,
             unique_id=unique_id,
+            is_python = False
         )
 
+    def parse_python_macro(self, base_node: UnparsedMacro) -> Macro:
+        mod = ast.parse(source=open(base_node.original_file_path).read())
+        fns = [x for x in mod.body if type(x) == ast.FunctionDef]
+        if len(fns) > 0:
+            name = fns[0].name
+            unique_id = self.generate_unique_id(name)
+            return Macro(
+                path = base_node.path,
+                macro_sql = base_node.raw_code,
+                original_file_path=base_node.original_file_path,
+                package_name=base_node.package_name,
+                resource_type=base_node.resource_type,
+                name=name,
+                unique_id=unique_id,
+                is_python = True
+            )
     def parse_unparsed_macros(self, base_node: UnparsedMacro) -> Iterable[Macro]:
         try:
             blocks: List[jinja.BlockTag] = [
@@ -103,7 +123,7 @@ class MacroParser(BaseParser[Macro]):
         assert isinstance(block.file, SourceFile)
         source_file = block.file
         assert isinstance(source_file.contents, str)
-        original_file_path = source_file.path.original_file_path
+        original_file_path = source_file.path.original_file_path        # this is really only used for error messages
 
         # this is really only used for error messages
         base_node = UnparsedMacro(
@@ -112,8 +132,11 @@ class MacroParser(BaseParser[Macro]):
             package_name=self.project.project_name,
             raw_code=source_file.contents,
             resource_type=NodeType.Macro,
-            language="sql",
+            language=block.file.path.original_file_path.split('.')[-1],
         )
-
+        if base_node.language == "py":
+            m = self.parse_python_macro(base_node)
+            if m:
+                self.manifest.add_macro(block.file, m)
         for node in self.parse_unparsed_macros(base_node):
             self.manifest.add_macro(block.file, node)

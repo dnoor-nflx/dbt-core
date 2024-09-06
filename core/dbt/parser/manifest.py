@@ -755,6 +755,7 @@ class ManifestLoader:
         adapter = get_adapter(self.root_project)
         db_wrapper = ParseProvider().DatabaseWrapper(adapter, macro_namespace)
         for macro in self.manifest.macros.values():
+            if macro.is_python: continue
             if macro.created_at < self.started_at:
                 continue
             possible_macro_calls = statically_extract_macro_calls(

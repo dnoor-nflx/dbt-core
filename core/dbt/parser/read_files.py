@@ -387,7 +387,7 @@ def get_file_types_for_project(project):
     file_types = {
         ParseFileType.Macro: {
             "paths": project.macro_paths,
-            "extensions": [".sql"],
+            "extensions": [".sql", ".py"],
             "parser": "MacroParser",
         },
         ParseFileType.Model: {
